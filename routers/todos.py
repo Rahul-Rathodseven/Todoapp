@@ -1,3 +1,4 @@
+from pathlib import Path as FilePath
 from typing import Annotated
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -9,7 +10,8 @@ from .auth import get_current_user
 from starlette.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-templates = Jinja2Templates(directory="TodoApp/templates")
+BASE_DIR = FilePath(__file__).resolve().parent.parent
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 router = APIRouter(
     prefix='/todos',
@@ -54,7 +56,11 @@ async def render_todo_page(request: Request, db: db_dependency):
 
         todos = db.query(Todos).filter(Todos.owner_id == user.get("id")).all()
 
-        return templates.TemplateResponse("todo.html", {"request": request, "todos": todos, "user": user})
+        return templates.TemplateResponse(
+            request,
+            "todo.html",
+            {"request": request, "todos": todos, "user": user},
+        )
 
     except:
         return redirect_to_login()
@@ -68,7 +74,11 @@ async def render_todo_page(request: Request):
         if user is None:
             return redirect_to_login()
 
-        return templates.TemplateResponse("add-todo.html", {"request": request, "user": user})
+        return templates.TemplateResponse(
+            request,
+            "add-todo.html",
+            {"request": request, "user": user},
+        )
 
     except:
         return redirect_to_login()
@@ -84,7 +94,11 @@ async def render_edit_todo_page(request: Request, todo_id: int, db: db_dependenc
 
         todo = db.query(Todos).filter(Todos.id == todo_id).first()
 
-        return templates.TemplateResponse("edit-todo.html", {"request": request, "todo": todo, "user": user})
+        return templates.TemplateResponse(
+            request,
+            "edit-todo.html",
+            {"request": request, "todo": todo, "user": user},
+        )
 
     except:
         return redirect_to_login()
@@ -155,9 +169,6 @@ async def delete_todo(user: user_dependency, db: db_dependency, todo_id: int = P
     db.query(Todos).filter(Todos.id == todo_id).filter(Todos.owner_id == user.get('id')).delete()
 
     db.commit()
-
-
-
 
 
 

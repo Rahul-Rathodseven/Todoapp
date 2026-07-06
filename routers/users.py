@@ -5,8 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from starlette import status
 from ..models import Users
 from ..database import SessionLocal
-from .auth import get_current_user
-from passlib.context import CryptContext
+from .auth import get_current_user, bcrypt_context
 
 router = APIRouter(
     prefix='/user',
@@ -24,7 +23,6 @@ def get_db():
 
 db_dependency = Annotated[Session, Depends(get_db)]
 user_dependency = Annotated[dict, Depends(get_current_user)]
-bcrypt_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 
 
 class UserVerification(BaseModel):
@@ -62,7 +60,6 @@ async def change_phonenumber(user: user_dependency, db: db_dependency,
     user_model.phone_number = phone_number
     db.add(user_model)
     db.commit()
-
 
 
 

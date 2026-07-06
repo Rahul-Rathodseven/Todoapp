@@ -1,4 +1,9 @@
 from datetime import timedelta, datetime, timezone
+import base64
+import hashlib
+import hmac
+from pathlib import Path
+import secrets
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -6,7 +11,6 @@ from sqlalchemy.orm import Session
 from starlette import status
 from ..database import SessionLocal
 from ..models import Users
-from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from jose import jwt, JWTError
 from fastapi.templating import Jinja2Templates
@@ -19,7 +23,52 @@ router = APIRouter(
 SECRET_KEY = '197b2c37c391bed93fe80344fe73b806947a65e36206e05a1a23c2fa12702fe3'
 ALGORITHM = 'HS256'
 
-bcrypt_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
+
+class PasswordContext:
+    """Small PBKDF2-based password helper that avoids bcrypt backend issues."""
+
+    algorithm = "pbkdf2_sha256"
+    iterations = 100_000
+
+    def hash(self, password: str) -> str:
+        salt = secrets.token_bytes(16)
+        digest = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            salt,
+            self.iterations,
+        )
+        salt_b64 = base64.b64encode(salt).decode("ascii")
+        digest_b64 = base64.b64encode(digest).decode("ascii")
+        return f"{self.algorithm}${self.iterations}${salt_b64}${digest_b64}"
+
+    def verify(self, password: str, stored_hash: str) -> bool:
+        try:
+            if stored_hash.startswith("$2"):
+                import bcrypt
+
+                return bcrypt.checkpw(
+                    password.encode("utf-8"),
+                    stored_hash.encode("utf-8"),
+                )
+
+            algorithm, iterations, salt_b64, digest_b64 = stored_hash.split("$", 3)
+            if algorithm != self.algorithm:
+                return False
+            salt = base64.b64decode(salt_b64.encode("ascii"))
+            expected_digest = base64.b64decode(digest_b64.encode("ascii"))
+            calculated_digest = hashlib.pbkdf2_hmac(
+                "sha256",
+                password.encode("utf-8"),
+                salt,
+                int(iterations),
+            )
+            return hmac.compare_digest(calculated_digest, expected_digest)
+        except (ValueError, TypeError):
+            return False
+
+
+bcrypt_context = PasswordContext()
 oauth2_bearer = OAuth2PasswordBearer(tokenUrl='auth/token')
 
 
@@ -48,18 +97,19 @@ def get_db():
 
 db_dependency = Annotated[Session, Depends(get_db)]
 
-templates = Jinja2Templates(directory="TodoApp/templates")
+BASE_DIR = Path(__file__).resolve().parent.parent
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
 ### Pages ###
 
 @router.get("/login-page")
 def render_login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse(request, "login.html", {"request": request})
 
 @router.get("/register-page")
 def render_register_page(request: Request):
-    return templates.TemplateResponse("register.html", {"request": request})
+    return templates.TemplateResponse(request, "register.html", {"request": request})
 
 ### Endpoints ###
 def authenticate_user(username: str, password: str, db):
@@ -96,6 +146,16 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_bearer)]):
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_user(db: db_dependency,
                       create_user_request: CreateUserRequest):
+    existing_user = db.query(Users).filter(
+        (Users.username == create_user_request.username) |
+        (Users.email == create_user_request.email)
+    ).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='A user with that username or email already exists.',
+        )
+
     create_user_model = Users(
         email=create_user_request.email,
         username=create_user_request.username,
@@ -109,6 +169,7 @@ async def create_user(db: db_dependency,
 
     db.add(create_user_model)
     db.commit()
+    db.refresh(create_user_model)
 
 
 @router.post("/token", response_model=Token)
@@ -121,10 +182,6 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
     token = create_access_token(user.username, user.id, user.role, timedelta(minutes=20))
 
     return {'access_token': token, 'token_type': 'bearer'}
-
-
-
-
 
 
 

@@ -45,7 +45,13 @@ pip install fastapi "uvicorn[standard]" sqlalchemy alembic jinja2 \
 
 ## Running the App
 
-This project uses package-relative imports such as `from .models import Base` and template/static paths like `TodoApp/templates`, so start the server from the parent directory of `TodoApp`.
+The app now supports both running from this folder and package-style imports used by the test suite.
+
+```bash
+uvicorn main:app --reload
+```
+
+You can still run it from the parent directory if you prefer:
 
 ```bash
 cd ..
