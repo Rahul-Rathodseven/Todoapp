@@ -41,15 +41,10 @@ pandas==2.3.3
 prettytable==3.17.0
 protobuf==6.33.6
 py4j==0.10.9.9
-pyls-spyder==0.4.0
-PyQt5==5.15.11
-PyQtWebEngine==5.15.7
-PySide6==6.9.2
 s3transfer==0.19.0
 scikit-learn==1.9.0
 scraper==0.1.0
 setuptools==80.9.0
-shiboken6==6.9.2
 skops==0.14.0
 sqlparse==0.5.5
 starlette==1.2.1
